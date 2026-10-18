@@ -53,7 +53,9 @@ export function parseScriptToSegments(
       tags: extractedTags.length > 0 ? extractedTags : matchedSpeaker?.tags || [],
       accent: matchedSpeaker?.accent,
       speed: matchedSpeaker?.speed || 1.0,
-      pitch: matchedSpeaker?.pitch || 0
+      pitch: matchedSpeaker?.pitch || 0,
+      voiceName: matchedSpeaker?.voiceName,
+      provider: matchedSpeaker?.provider
     });
 
     currentBuffer = [];

@@ -27,7 +27,8 @@ import {
 import {
   INITIAL_SPEAKERS,
   SPEAKER_COLORS,
-  PRESET_SCENES
+  PRESET_SCENES,
+  ALL_VOICE_PROFILES
 } from './constants/ttsData';
 import { parseScriptToSegments } from './utils/ttsParser';
 
@@ -127,6 +128,62 @@ export default function App() {
         message: `Exemplo "${preset.title}" carregado. Pronto para converter.`
       });
     }
+  };
+
+  // AI Generator state
+  const [isGeneratingContext, setIsGeneratingContext] = React.useState(false);
+  const [isRandomizingSpeakers, setIsRandomizingSpeakers] = React.useState(false);
+
+  const handleGenerateAiContext = async () => {
+    setIsGeneratingContext(true);
+    try {
+      const res = await fetch('/api/ai/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'context' })
+      });
+      const data = await res.json();
+      if (data.success && data.result) {
+        setSceneContext(data.result);
+      }
+    } catch (e) {
+      console.warn('AI context error:', e);
+    } finally {
+      setIsGeneratingContext(false);
+    }
+  };
+
+  const handleRandomizeSpeakers = () => {
+    setIsRandomizingSpeakers(true);
+    setTimeout(() => {
+      const accents = ['carioca', 'paulistano', 'nordestino', 'mineiro', 'baiano', 'gaúcho', 'cearense'];
+      const recommendedVoices = ALL_VOICE_PROFILES.filter((v) => v.recommended);
+      const shuffledVoices = [...recommendedVoices].sort(() => 0.5 - Math.random());
+
+      const nameGroups = [
+        ['Mariana', 'Carlos', 'Rachel', 'Dr. Roberto', 'Narrador'],
+        ['Beatriz', 'Lucas', 'Camila', 'Professor Fábio', 'Apresentador'],
+        ['Juliana', 'Antônio', 'Vitória', 'Ricardo', 'Locutor']
+      ];
+      const selectedNames = nameGroups[Math.floor(Math.random() * nameGroups.length)];
+
+      setSpeakers((prev) =>
+        prev.map((s, idx) => {
+          const v = shuffledVoices[idx % shuffledVoices.length];
+          const acc = accents[(idx + Math.floor(Math.random() * accents.length)) % accents.length];
+          return {
+            ...s,
+            name: selectedNames[idx] || s.name,
+            voiceName: v.name,
+            provider: v.provider,
+            voiceGender: v.gender === 'Neutro' ? 'Feminino' : v.gender,
+            voiceDescription: `${v.providerLabel} - ${v.timbre}`,
+            accent: acc
+          };
+        })
+      );
+      setIsRandomizingSpeakers(false);
+    }, 350);
   };
 
   // Main Conversion Handler using Server-Sent Events (SSE)
@@ -251,6 +308,8 @@ export default function App() {
             <SceneContextInput
               sceneContext={sceneContext}
               onChangeSceneContext={setSceneContext}
+              onGenerateAiContext={handleGenerateAiContext}
+              isGeneratingAiContext={isGeneratingContext}
             />
           </div>
         </div>
@@ -282,6 +341,8 @@ export default function App() {
           onSelectActiveSpeaker={setActiveSpeakerId}
           onUpdateSpeaker={handleUpdateSpeaker}
           onAppendSpeakerBlock={handleAppendSpeakerBlock}
+          onRandomizeSpeakers={handleRandomizeSpeakers}
+          isRandomizingSpeakers={isRandomizingSpeakers}
         />
 
         {/* Script & Dialogue Multi-Speaker Editor */}

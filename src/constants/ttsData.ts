@@ -3,7 +3,9 @@ import type {
   RegionalAccent,
   VoiceStyleTag,
   SpeakerColorConfig,
-  SpeakerConfig
+  SpeakerConfig,
+  VoiceProfile,
+  VoiceProvider
 } from '../types/tts.ts';
 
 export const LANGUAGES: LanguageOption[] = [
@@ -240,24 +242,339 @@ export const SPEAKER_COLORS: SpeakerColorConfig[] = [
   }
 ];
 
+export const ALL_VOICE_PROFILES: VoiceProfile[] = [
+  // --- PUTER.JS GATEWAY: OPENAI TTS ---
+  {
+    id: 'openai-nova',
+    name: 'nova',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Feminino',
+    timbre: 'Expressiva, dinâmica, alegre e envolvente para podcasts e diálogos.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'openai-alloy',
+    name: 'alloy',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Neutro',
+    timbre: 'Neutra, balanceada, versátil e de alta clareza vocal.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'openai-echo',
+    name: 'echo',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Masculina suave, confiante, acolhedora e natural.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'openai-fable',
+    name: 'fable',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Narrativa teatral, cadência expressiva e sotaque marcante.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'openai-onyx',
+    name: 'onyx',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Grave, profunda, autoritária e cinematográfica.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'openai-shimmer',
+    name: 'shimmer',
+    provider: 'puter-openai',
+    providerLabel: 'OpenAI TTS (Puter.js)',
+    gender: 'Feminino',
+    timbre: 'Clara, melodiosa, doce e brilhante.',
+    model: 'tts-1-hd',
+    lang: 'pt-BR'
+  },
+
+  // --- MICROSOFT EDGE NEURAL TTS ---
+  {
+    id: 'edge-francisca',
+    name: 'pt-BR-FranciscaNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Feminino',
+    timbre: 'Brasileira autêntica, calorosa, expressiva e natural em português.',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'edge-antonio',
+    name: 'pt-BR-AntonioNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Masculino',
+    timbre: 'Brasileiro dinâmico, moderno, excelente para podcast e notícias.',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'edge-thalita',
+    name: 'pt-BR-ThalitaNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Feminino',
+    timbre: 'Jovem, descontraída, estilo redes sociais e conversação rápida.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'edge-fabio',
+    name: 'pt-BR-FabioNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Masculino',
+    timbre: 'Narrador clássico, firme, dicção precisa para documentários.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'edge-nicolau',
+    name: 'pt-BR-NicolauNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Masculino',
+    timbre: 'Informal, amigável, excelente para conversas cotidianas.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'edge-brenda',
+    name: 'pt-BR-BrendaNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Feminino',
+    timbre: 'Vibrante, expressiva, calor humano e ritmo cativante.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'edge-valerio',
+    name: 'pt-BR-ValerioNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Masculino',
+    timbre: 'Corporativo, seguro, profissional e sóbrio.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'edge-raquel',
+    name: 'pt-PT-RaquelNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Feminino',
+    timbre: 'Português europeu de Portugal, suave e elegante.',
+    lang: 'pt-PT'
+  },
+  {
+    id: 'edge-jenny',
+    name: 'en-US-JennyNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Feminino',
+    timbre: 'Inglês americano nativo, entonação natural e fluida.',
+    lang: 'en-US'
+  },
+  {
+    id: 'edge-guy',
+    name: 'en-US-GuyNeural',
+    provider: 'microsoft-edge',
+    providerLabel: 'Microsoft Edge Neural',
+    gender: 'Masculino',
+    timbre: 'Inglês americano conversacional e dinâmico.',
+    lang: 'en-US'
+  },
+
+  // --- PUTER.JS GATEWAY: ELEVENLABS MULTILINGUAL ---
+  {
+    id: 'eleven-rachel',
+    name: 'Rachel',
+    provider: 'puter-elevenlabs',
+    providerLabel: 'ElevenLabs (Puter.js)',
+    gender: 'Feminino',
+    timbre: 'Calma, profissional, dicção cinematográfica e refinada.',
+    model: 'eleven_multilingual_v2',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'eleven-adam',
+    name: 'Adam',
+    provider: 'puter-elevenlabs',
+    providerLabel: 'ElevenLabs (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Narrador profundo, ressonante, ideal para trailers e audiobooks.',
+    model: 'eleven_multilingual_v2',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'eleven-antoni',
+    name: 'Antoni',
+    provider: 'puter-elevenlabs',
+    providerLabel: 'ElevenLabs (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Versátil, modulado, expressivo e empático.',
+    model: 'eleven_multilingual_v2',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'eleven-bella',
+    name: 'Bella',
+    provider: 'puter-elevenlabs',
+    providerLabel: 'ElevenLabs (Puter.js)',
+    gender: 'Feminino',
+    timbre: 'Jovem, doce, expressiva e dramática.',
+    model: 'eleven_multilingual_v2',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'eleven-josh',
+    name: 'Josh',
+    provider: 'puter-elevenlabs',
+    providerLabel: 'ElevenLabs (Puter.js)',
+    gender: 'Masculino',
+    timbre: 'Confiante, comercial, jovem e seguro.',
+    model: 'eleven_multilingual_v2',
+    lang: 'pt-BR'
+  },
+
+  // --- PUTER.JS: NEURAL ENGINE ---
+  {
+    id: 'puter-camila',
+    name: 'Camila',
+    provider: 'puter-neural',
+    providerLabel: 'Puter Neural Engine',
+    gender: 'Feminino',
+    timbre: 'Voz neural brasileira natural, fluida e clara.',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'puter-ricardo',
+    name: 'Ricardo',
+    provider: 'puter-neural',
+    providerLabel: 'Puter Neural Engine',
+    gender: 'Masculino',
+    timbre: 'Voz neural masculina brasileira, ritmo firme e comunicativo.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'puter-vitoria',
+    name: 'Vitoria',
+    provider: 'puter-neural',
+    providerLabel: 'Puter Neural Engine',
+    gender: 'Feminino',
+    timbre: 'Voz neural suave, tom afetuoso e acolhedor.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'puter-joanna',
+    name: 'Joanna',
+    provider: 'puter-neural',
+    providerLabel: 'Puter Neural Engine',
+    gender: 'Feminino',
+    timbre: 'Voz neural americana clássica de alta fidelidade.',
+    lang: 'en-US'
+  },
+  {
+    id: 'puter-matthew',
+    name: 'Matthew',
+    provider: 'puter-neural',
+    providerLabel: 'Puter Neural Engine',
+    gender: 'Masculino',
+    timbre: 'Voz neural masculina conversacional e natural.',
+    lang: 'en-US'
+  },
+
+  // --- GOOGLE GEMINI 3.8 FLASH TTS ---
+  {
+    id: 'gemini-kore',
+    name: 'Kore',
+    provider: 'gemini',
+    providerLabel: 'Gemini 3.8 Flash TTS',
+    gender: 'Feminino',
+    timbre: 'Voz feminina clara, expressiva e envolvente no Gemini TTS.',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'gemini-puck',
+    name: 'Puck',
+    provider: 'gemini',
+    providerLabel: 'Gemini 3.8 Flash TTS',
+    gender: 'Masculino',
+    timbre: 'Voz masculina jovem, enérgica, versátil e dinâmica.',
+    lang: 'pt-BR',
+    recommended: true
+  },
+  {
+    id: 'gemini-charon',
+    name: 'Charon',
+    provider: 'gemini',
+    providerLabel: 'Gemini 3.8 Flash TTS',
+    gender: 'Masculino',
+    timbre: 'Voz masculina grave, serena, madura e respeitável.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'gemini-fenrir',
+    name: 'Fenrir',
+    provider: 'gemini',
+    providerLabel: 'Gemini 3.8 Flash TTS',
+    gender: 'Masculino',
+    timbre: 'Voz masculina profunda, autoritária e épica.',
+    lang: 'pt-BR'
+  },
+  {
+    id: 'gemini-zephyr',
+    name: 'Zephyr',
+    provider: 'gemini',
+    providerLabel: 'Gemini 3.8 Flash TTS',
+    gender: 'Feminino',
+    timbre: 'Voz feminina suave, calma, doce e amigável.',
+    lang: 'pt-BR'
+  }
+];
+
 export const INITIAL_SPEAKERS: SpeakerConfig[] = [
   {
     id: 1,
-    name: 'Narrador',
-    voiceName: 'Kore',
+    name: 'Mariana',
+    voiceName: 'nova',
+    provider: 'puter-openai',
     voiceGender: 'Feminino',
-    voiceDescription: 'Voz feminina clara, expressiva e envolvente.',
+    voiceDescription: 'OpenAI TTS (via Puter.js) - Expressiva e animada.',
     accent: 'carioca',
-    tags: ['confiante'],
+    tags: ['animada', 'confiante'],
     speed: 1.0,
     pitch: 0
   },
   {
     id: 2,
     name: 'Carlos',
-    voiceName: 'Puck',
+    voiceName: 'pt-BR-AntonioNeural',
+    provider: 'microsoft-edge',
     voiceGender: 'Masculino',
-    voiceDescription: 'Voz masculina jovem, enérgica e dinâmica.',
+    voiceDescription: 'Microsoft Edge Neural - Brasileiro dinâmico para podcast.',
     accent: 'paulistano',
     tags: ['animada'],
     speed: 1.0,
@@ -265,10 +582,11 @@ export const INITIAL_SPEAKERS: SpeakerConfig[] = [
   },
   {
     id: 3,
-    name: 'Mariana',
-    voiceName: 'Zephyr',
+    name: 'Rachel',
+    voiceName: 'Rachel',
+    provider: 'puter-elevenlabs',
     voiceGender: 'Feminino',
-    voiceDescription: 'Voz feminina suave, doce e acolhedora.',
+    voiceDescription: 'ElevenLabs Multilingual v2 (via Puter.js) - Serena e cinematográfica.',
     accent: 'nordestino',
     tags: ['calma'],
     speed: 1.0,
@@ -277,9 +595,10 @@ export const INITIAL_SPEAKERS: SpeakerConfig[] = [
   {
     id: 4,
     name: 'Dr. Roberto',
-    voiceName: 'Charon',
-    voiceGender: 'Masculino',
-    voiceDescription: 'Voz masculina grave, serena e respeitável.',
+    voiceName: 'pt-BR-FranciscaNeural',
+    provider: 'microsoft-edge',
+    voiceGender: 'Feminino',
+    voiceDescription: 'Microsoft Edge Neural - Calorosa e autêntica.',
     accent: 'mineiro',
     tags: ['pausada'],
     speed: 0.95,
@@ -287,14 +606,15 @@ export const INITIAL_SPEAKERS: SpeakerConfig[] = [
   },
   {
     id: 5,
-    name: 'Vitória',
-    voiceName: 'Fenrir',
+    name: 'Narrador',
+    voiceName: 'onyx',
+    provider: 'puter-openai',
     voiceGender: 'Masculino',
-    voiceDescription: 'Voz masculina profunda, imponente e marcante.',
+    voiceDescription: 'OpenAI TTS (via Puter.js) - Grave, profunda e imponente.',
     accent: 'gaúcho',
     tags: ['autoritária'],
-    speed: 1.05,
-    pitch: 1
+    speed: 1.0,
+    pitch: 0
   }
 ];
 

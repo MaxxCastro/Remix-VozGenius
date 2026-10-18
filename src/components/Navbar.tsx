@@ -21,13 +21,13 @@ export const Navbar: React.FC<NavbarProps> = ({ onSelectPreset, hasApiKey }) => 
               <span className="font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
                 VozGenius AI
               </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5 text-indigo-400" />
-                Gemini 3.8 Flash TTS
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                <Sparkles className="w-2.5 h-2.5 text-emerald-400" />
+                Puter.js • Edge TTS • Gemini
               </span>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
-              Estúdio de Conversão de Texto em Fala Multi-Speaker & Sotaques Regionais
+              Estúdio Multi-Speaker & Gateway Livre de IA (OpenAI TTS, Edge Neural, ElevenLabs)
             </p>
           </div>
         </div>

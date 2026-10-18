@@ -1,5 +1,24 @@
 export type GeminiVoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr';
 
+export type VoiceProvider = 
+  | 'gemini' 
+  | 'puter-openai' 
+  | 'microsoft-edge' 
+  | 'puter-elevenlabs' 
+  | 'puter-neural';
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  provider: VoiceProvider;
+  providerLabel: string;
+  gender: 'Feminino' | 'Masculino' | 'Neutro';
+  timbre: string;
+  model?: string;
+  lang?: string;
+  recommended?: boolean;
+}
+
 export interface SpeakerColorConfig {
   id: number;
   label: string;
@@ -17,7 +36,8 @@ export interface SpeakerColorConfig {
 export interface SpeakerConfig {
   id: number; // 1 to 5
   name: string;
-  voiceName: GeminiVoiceName;
+  voiceName: string;
+  provider?: VoiceProvider;
   voiceGender: 'Feminino' | 'Masculino';
   voiceDescription: string;
   accent: string;
@@ -35,6 +55,8 @@ export interface SpeechSegment {
   accent?: string;
   speed?: number;
   pitch?: number;
+  voiceName?: string;
+  provider?: VoiceProvider;
 }
 
 export type ConversionStatus = 'aguardando' | 'convertendo' | 'concluído' | 'erro';
@@ -83,15 +105,3 @@ export interface VoiceStyleTag {
   description: string;
 }
 
-export interface UserProfile {
-  id: string;
-  name: string;
-  email: string;
-  avatarUrl?: string;
-  provider: 'google' | 'email';
-  dailyVoiceQuota: number;
-  usedVoiceQuota: number;
-  dailyAiQuota: number;
-  usedAiQuota: number;
-  lastActiveDate: string;
-}

@@ -117,6 +117,41 @@ app.get('/api/tts/preview', async (req, res) => {
   try {
     const voiceName = (req.query.voice as string) || 'Kore';
     const samplePhrases: Record<string, string> = {
+      // Puter OpenAI
+      nova: 'Olá! Eu sou a voz Nova da OpenAI via Puter.js, cheia de energia e expressividade.',
+      alloy: 'Olá! Sou a voz Alloy da OpenAI no gateway Puter.js, neutra e versátil para narrações.',
+      echo: 'Fala aí! Esta é a voz Echo da OpenAI via Puter.js, calorosa e conversacional.',
+      fable: 'Saudações! Esta é a voz Fable da OpenAI, com entonação teatral e narrativa marcante.',
+      onyx: 'Atenção. Esta é a voz Onyx da OpenAI via Puter.js, grave, profunda e cinematográfica.',
+      shimmer: 'Olá a todos! Esta é a voz Shimmer da OpenAI, suave, clara e reluzente.',
+
+      // Microsoft Edge Neural
+      'pt-BR-FranciscaNeural': 'Olá! Esta é a voz Francisca da Microsoft Edge Neural, calorosa e brasileira autêntica.',
+      'pt-BR-AntonioNeural': 'Fala aí, pessoal! Voz Antonio da Microsoft Edge Neural, dinâmica para podcast e diálogo.',
+      'pt-BR-ThalitaNeural': 'Oi gente! Esta é a voz Thalita da Microsoft Edge Neural, jovem e descontraída.',
+      'pt-BR-FabioNeural': 'Olá. Esta é a voz Fabio da Microsoft Edge Neural, estilo narrador clássico.',
+      'pt-BR-NicolauNeural': 'E aí, tudo bem? Voz Nicolau da Microsoft Edge Neural, descontraída e informal.',
+      'pt-BR-BrendaNeural': 'Olá! Voz Brenda da Microsoft Edge Neural, com muita expressividade e alegria.',
+      'pt-BR-ValerioNeural': 'Olá. Esta é a voz Valerio da Microsoft Edge Neural, formal e corporativa.',
+      'pt-PT-RaquelNeural': 'Olá! Esta é a voz Raquel em português europeu da Microsoft Edge.',
+      'en-US-JennyNeural': 'Hello! This is Jenny from Microsoft Edge Neural, natural and fluent.',
+      'en-US-GuyNeural': 'Hey there! This is Guy from Microsoft Edge Neural, dynamic and clear.',
+
+      // Puter ElevenLabs
+      Rachel: 'Olá! Esta é a voz Rachel da ElevenLabs no Puter.js, calma e com acabamento de estúdio.',
+      Adam: 'Atenção. Sou a voz Adam da ElevenLabs no Puter.js, profunda e ressonante.',
+      Antoni: 'Olá! Esta é a voz Antoni da ElevenLabs no gateway Puter.js, versátil e empática.',
+      Bella: 'Oi! Sou a voz Bella da ElevenLabs no Puter.js, doce e envolvente para histórias.',
+      Josh: 'Fala aí! Aqui é a voz Josh da ElevenLabs no Puter.js, jovem e comercial.',
+
+      // Puter Neural
+      Camila: 'Olá! Sou a Camila, voz neural brasileira de alta fidelidade no Puter Engine.',
+      Ricardo: 'Olá a todos! Sou o Ricardo, voz neural masculina brasileira no Puter Engine.',
+      Vitoria: 'Olá! Sou a Vitória, voz neural suave e acolhedora no Puter Engine.',
+      Joanna: 'Hello! I am Joanna, a natural neural voice on the Puter AI Gateway.',
+      Matthew: 'Hello there! I am Matthew, a conversational neural voice on Puter.',
+
+      // Gemini
       Kore: 'Olá! Esta é uma demonstração da voz Kore, feminina, clara e expressiva com Gemini TTS.',
       Puck: 'Fala aí! Esta é uma demonstração da voz Puck, tom masculino jovem, versátil e dinâmico.',
       Charon: 'Olá. Esta é uma demonstração da voz Charon, tom masculino grave, sereno e confiante.',
@@ -124,7 +159,7 @@ app.get('/api/tts/preview', async (req, res) => {
       Zephyr: 'Olá! Esta é uma demonstração da voz Zephyr, tom feminino suave, doce e acolhedor.'
     };
 
-    const text = samplePhrases[voiceName] || samplePhrases.Kore;
+    const text = samplePhrases[voiceName] || `Demonstração da voz ${voiceName} com alta fidelidade acústica.`;
 
     // Return cached audio if available
     if (voicePreviewCache.has(voiceName)) {
@@ -448,13 +483,17 @@ app.post('/api/tts/generate-stream', async (req, res) => {
       }
 
       const styleString = styleDirectives.join(' ');
-      const voiceName = seg.voiceName || (speakerId % 2 === 1 ? 'Kore' : 'Puck');
+      const rawVoiceName = seg.voiceName || (speakerId % 2 === 1 ? 'Kore' : 'Puck');
+      const geminiVoices = ['Kore', 'Puck', 'Charon', 'Fenrir', 'Zephyr'];
+      const voiceName = geminiVoices.includes(rawVoiceName)
+        ? rawVoiceName
+        : (speakerId % 2 === 1 ? 'Kore' : 'Puck');
 
       let audioObtained = false;
       let segDuration = 2.0;
 
       // Try Gemini TTS first if quota not already marked as exhausted
-      if (ai && !hitGeminiQuota && !isMp3Mode) {
+      if (ai && !hitGeminiQuota && !isMp3Mode && seg.provider !== 'microsoft-edge') {
         const candidateModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
         for (const candidate of candidateModels) {
           try {
@@ -478,7 +517,7 @@ app.post('/api/tts/generate-stream', async (req, res) => {
                 responseModalities: ['AUDIO'],
                 speechConfig: {
                   voiceConfig: {
-                    prebuiltVoiceConfig: { voiceName }
+                    prebuiltVoiceConfig: { voiceName: voiceName as any }
                   }
                 }
               }
