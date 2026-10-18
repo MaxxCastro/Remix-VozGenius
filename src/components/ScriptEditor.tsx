@@ -33,6 +33,8 @@ interface ScriptEditorProps {
   activeSpeakerId: number;
   onSelectActiveSpeaker: (id: number) => void;
   currentlyPlayingSpeakerId?: number;
+  onGenerateAiScript?: () => void;
+  isGeneratingAiScript?: boolean;
 }
 
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
@@ -41,7 +43,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   speakers,
   activeSpeakerId,
   onSelectActiveSpeaker,
-  currentlyPlayingSpeakerId
+  currentlyPlayingSpeakerId,
+  onGenerateAiScript,
+  isGeneratingAiScript = false
 }) => {
   const [viewMode, setViewMode] = React.useState<'blocks' | 'raw'>('blocks');
   const [isCollapsed, setIsCollapsed] = React.useState(false);

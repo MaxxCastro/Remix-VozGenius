@@ -1,9 +1,11 @@
 import React from 'react';
-import { Clapperboard, Sparkles } from 'lucide-react';
+import { Clapperboard, Sparkles, Dices, Loader2 } from 'lucide-react';
 
 interface SceneContextInputProps {
   sceneContext: string;
   onChangeSceneContext: (value: string) => void;
+  onGenerateAiContext?: () => void;
+  isGeneratingAiContext?: boolean;
 }
 
 const QUICK_CONTEXT_PRESETS = [
@@ -16,21 +18,42 @@ const QUICK_CONTEXT_PRESETS = [
 
 export const SceneContextInput: React.FC<SceneContextInputProps> = ({
   sceneContext,
-  onChangeSceneContext
+  onChangeSceneContext,
+  onGenerateAiContext,
+  isGeneratingAiContext = false
 }) => {
   return (
     <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-sm">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
         <label className="text-xs font-bold text-slate-100 uppercase tracking-wider flex items-center gap-2">
           <div className="p-1.5 rounded-lg bg-pink-500/10 text-pink-400 border border-pink-500/30">
             <Clapperboard className="w-4 h-4" />
           </div>
           Contexto Geral da Cena & Ambientação Narrativa
         </label>
-        <span className="text-[11px] text-slate-400 flex items-center gap-1">
-          <Sparkles className="w-3.5 h-3.5 text-pink-400" />
-          Orienta o modelo Gemini TTS
-        </span>
+
+        {/* Strategic AI Randomizer Button for Context */}
+        {onGenerateAiContext && (
+          <button
+            type="button"
+            onClick={onGenerateAiContext}
+            disabled={isGeneratingAiContext}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-pink-500/10 hover:bg-pink-500/20 active:bg-pink-500/30 text-pink-300 border border-pink-500/30 transition-all shadow-sm cursor-pointer hover:border-pink-500/60"
+            title="Sugerir e preencher automaticamente uma ambientação criativa usando IA"
+          >
+            {isGeneratingAiContext ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-pink-400" />
+                <span>Gerando Cena IA...</span>
+              </>
+            ) : (
+              <>
+                <Dices className="w-3.5 h-3.5 text-pink-400" />
+                <span>Gerar Ideia com IA</span>
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <p className="text-xs text-slate-400 mb-2">

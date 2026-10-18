@@ -227,6 +227,124 @@ app.get('/api/tts/preview', async (req, res) => {
   }
 });
 
+// AI Automatic Generation Endpoint for Context, Speakers, and Script
+app.post('/api/ai/generate', async (req, res) => {
+  try {
+    const { type = 'script', currentContext = '', currentSpeakers = [] } = req.body;
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    // AI Generation with Gemini if API key available
+    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: { headers: { 'User-Agent': 'aistudio-build' } }
+        });
+
+        if (type === 'context') {
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [
+              {
+                role: 'user',
+                parts: [
+                  {
+                    text: 'Gere apenas uma frase curta, cinematográfica e envolvente descrevendo a ambientação de um diálogo de podcast ou cena dramática em português brasileiro. Seja específico sobre a acústica e a energia do ambiente. Retorne apenas a frase sem aspas.'
+                  }
+                ]
+              }
+            ]
+          });
+          const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) {
+            return res.json({ success: true, result: text });
+          }
+        } else if (type === 'script') {
+          const speakerPrompt = currentSpeakers.length > 0
+            ? currentSpeakers.map((s: any) => `Speaker ${s.id} (${s.name}) - voz ${s.voiceName}, sotaque ${s.accent || 'neutro'}`).join('; ')
+            : 'Speaker 1 (Mariana) e Speaker 2 (Carlos)';
+
+          const prompt = `Você é um roteirista profissional de áudio. Crie um diálogo dinâmico e natural com 3 a 5 falas entre os personagens: ${speakerPrompt}.
+Contexto da cena: ${currentContext || 'Estúdio moderno de gravação'}.
+REGRAS OBRIGATÓRIAS:
+- Cada fala DEVE começar exatamente com [Speaker X - Nome]:
+- Use tags de emoção como [animada], [calma], [brava], [carioca], [confiante] no início da fala.
+- Use reações naturais como <laugh>, <breath> ou |yeah| ocasionalmente.
+- Retorne apenas as linhas do diálogo, sem introduções ou explicações.`;
+
+          const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          const text = response.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+          if (text) {
+            return res.json({ success: true, result: text });
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('Gemini generation error, using creative generator fallback:', geminiErr);
+      }
+    }
+
+    // Creative, rich random generators (fallback and immediate fast results)
+    if (type === 'context') {
+      const creativeContexts = [
+        'Estúdio de podcast intimista em São Paulo, com café recém-passado e microfones condensadores quentes.',
+        'Varanda de uma pousada em Olinda ao entardecer, com som distante do mar e brisa tropical acolhedora.',
+        'Sala de reuniões futurista com holograma central e iluminação neon suave em noite de tempestade.',
+        'Cabine de transmissão esportiva de rádio vibrante nos minutos finais de um clássico eletrizante.',
+        'Café literário histórico em Porto Alegre, com piso de madeira nobre e conversa filosófica descontraída.',
+        'Mesa de barzinho no Rio de Janeiro com risadas soltas, batuque de samba ao longe e muita empolgação.',
+        'Laboratório de astrofísica em Minas Gerais durante a recepção de um sinal de rádio misterioso do cosmos.',
+        'Bastidores de um grande espetáculo teatral minutos antes das cortinas vermelhas se abrirem.'
+      ];
+      const randomCtx = creativeContexts[Math.floor(Math.random() * creativeContexts.length)];
+      return res.json({ success: true, result: randomCtx });
+    } else if (type === 'speakers') {
+      const speakerSets = [
+        [
+          { id: 1, name: 'Mariana', voiceName: 'Kore', accent: 'carioca', tags: ['confiante'], speed: 1.0, pitch: 0 },
+          { id: 2, name: 'Lucas', voiceName: 'Puck', accent: 'paulistano', tags: ['animada'], speed: 1.05, pitch: 1 },
+          { id: 3, name: 'Beatriz', voiceName: 'Zephyr', accent: 'nordestino', tags: ['alegre'], speed: 0.95, pitch: 0 }
+        ],
+        [
+          { id: 1, name: 'Prof. Arthur', voiceName: 'Charon', accent: 'mineiro', tags: ['calma'], speed: 0.95, pitch: -2 },
+          { id: 2, name: 'Clarice', voiceName: 'Kore', accent: 'gaúcho', tags: ['confiante'], speed: 1.0, pitch: 1 },
+          { id: 3, name: 'Rodrigo', voiceName: 'Fenrir', accent: 'baiano', tags: ['autoritária'], speed: 1.0, pitch: -1 }
+        ],
+        [
+          { id: 1, name: 'Apresentador Leo', voiceName: 'Puck', accent: 'paulistano', tags: ['animada'], speed: 1.1, pitch: 1 },
+          { id: 2, name: 'Dra. Vanessa', voiceName: 'Zephyr', accent: 'cearense', tags: ['pausada'], speed: 0.95, pitch: 0 }
+        ]
+      ];
+      const randomSet = speakerSets[Math.floor(Math.random() * speakerSets.length)];
+      return res.json({ success: true, result: randomSet });
+    } else if (type === 'script') {
+      const scriptPresets = [
+        `[Speaker 1 - Mariana]: [animada] [carioca] Fala galera! Bem-vindos ao episódio de hoje! Vocês não vão acreditar na novidade que acabou de sair!
+[Speaker 2 - Carlos]: [alegre] [paulistano] Conta logo, Mariana! <laugh> Não me deixa curioso na frente da nossa audiência inteira!
+[Speaker 1 - Mariana]: [confiante] O novo motor vocal de IA agora consegue interpretar sotaques regionais com uma cadência surreal!
+[Speaker 2 - Carlos]: [animada] |yeah| Isso muda completamente a produção de conteúdo em áudio no Brasil!`,
+
+        `[Speaker 1 - Mariana]: [calma] [mineiro] Bom dia a todos. O segredo de uma boa história está nos detalhes da voz e na sinceridade de cada palavra.
+[Speaker 2 - Carlos]: [confiante] [gaúcho] Com certeza tchê! Quando o diálogo soa verdadeiro, quem ouve se conecta instantaneamente com a mensagem.
+[Speaker 1 - Mariana]: [alegre] <breath> É exatamente isso! A emoção certa transforma qualquer roteiro simples em uma experiência inesquecível.`,
+
+        `[Speaker 1 - Narrador]: [misteriosa] A noite caía silenciosa sobre a velha colina, e um trovão distante anunciava que algo estava prestes a acontecer.
+[Speaker 2 - Carlos]: [brava] [paulistano] Nós não podemos esperar mais nem um segundo! Alguém precisa verificar aquela luz estranha na torre!
+[Speaker 3 - Beatriz]: [calma] [nordestino] Respira fundo, Carlos! <gasp> Olha lá... A porta se abriu sozinha!`
+      ];
+      const randomScript = scriptPresets[Math.floor(Math.random() * scriptPresets.length)];
+      return res.json({ success: true, result: randomScript });
+    }
+
+    res.json({ success: true, result: 'Geração concluída.' });
+  } catch (error: any) {
+    console.error('AI Generation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Main SSE TTS endpoint with live progress updates
 app.post('/api/tts/generate-stream', async (req, res) => {
   // Set headers for Server-Sent Events

@@ -82,3 +82,16 @@ export interface VoiceStyleTag {
   category: 'emocao' | 'ritmo' | 'tom' | 'estilo';
   description: string;
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  avatarUrl?: string;
+  provider: 'google' | 'email';
+  dailyVoiceQuota: number;
+  usedVoiceQuota: number;
+  dailyAiQuota: number;
+  usedAiQuota: number;
+  lastActiveDate: string;
+}
