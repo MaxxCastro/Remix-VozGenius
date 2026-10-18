@@ -1,11 +1,21 @@
 export type GeminiVoiceName = 'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr';
 
+export type VoiceEngineId = 'gemini' | 'openai' | 'elevenlabs' | 'microsoft-edge' | 'puter-neural';
+
 export type VoiceProvider = 
   | 'gemini' 
+  | 'openai'
+  | 'elevenlabs'
   | 'puter-openai' 
   | 'microsoft-edge' 
   | 'puter-elevenlabs' 
   | 'puter-neural';
+
+export interface GlobalTtsSettings {
+  activeEngine: VoiceEngineId;
+  autoFallbackOnQuota: boolean;
+  sampleRate?: number;
+}
 
 export interface VoiceProfile {
   id: string;

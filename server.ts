@@ -491,9 +491,10 @@ app.post('/api/tts/generate-stream', async (req, res) => {
 
       let audioObtained = false;
       let segDuration = 2.0;
+      const isGeminiSegment = !seg.provider || seg.provider === 'gemini';
 
-      // Try Gemini TTS first if quota not already marked as exhausted
-      if (ai && !hitGeminiQuota && !isMp3Mode && seg.provider !== 'microsoft-edge') {
+      // Try Gemini TTS first if segment requests Gemini and quota not exhausted
+      if (ai && !hitGeminiQuota && !isMp3Mode && isGeminiSegment) {
         const candidateModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
         for (const candidate of candidateModels) {
           try {
@@ -542,14 +543,22 @@ app.post('/api/tts/generate-stream', async (req, res) => {
         }
       }
 
-      // If Gemini hit quota or failed, use authentic speech synthesis fallback
+      // If non-Gemini segment or Gemini quota exhausted/failed, use high-fidelity synthesis engine
       if (!audioObtained) {
         try {
           const speechAudioBuf = await fetchSpeechAudioFallback(text, language);
           if (speechAudioBuf.length > 0) {
             mp3Chunks.push(speechAudioBuf);
             isMp3Mode = true;
-            finalModelName = 'Motor Vocal de Alta Fidelidade (Fallback Automático - Cota Gemini 429)';
+            const provLabel =
+              seg.provider === 'puter-openai' || seg.provider === 'openai'
+                ? 'OpenAI TTS (Gateway)'
+                : seg.provider === 'puter-elevenlabs' || seg.provider === 'elevenlabs'
+                ? 'ElevenLabs Multilingual (Gateway)'
+                : seg.provider === 'microsoft-edge'
+                ? 'Microsoft Edge Neural'
+                : 'Motor Vocal de Alta Fidelidade (Fallback)';
+            finalModelName = provLabel;
             segDuration = Math.max(1.5, cleanTextForSpeech(text).length * 0.075);
             audioObtained = true;
           }

@@ -14,9 +14,13 @@ import {
   Globe,
   Bot
 } from 'lucide-react';
-import { SpeakerConfig, VoiceProfile, VoiceProvider } from '../types/tts';
+import { SpeakerConfig, VoiceProfile, VoiceProvider, VoiceEngineId } from '../types/tts';
 import { SPEAKER_COLORS, ALL_VOICE_PROFILES } from '../constants/ttsData';
-import { generateVoicePreviewAudio } from '../utils/voiceGateway';
+import {
+  generateVoicePreviewAudio,
+  normalizeProvider,
+  getDefaultVoiceForEngine
+} from '../utils/voiceGateway';
 
 interface SpeakerManagerProps {
   speakers: SpeakerConfig[];
@@ -26,6 +30,7 @@ interface SpeakerManagerProps {
   onAppendSpeakerBlock: (speakerId: number) => void;
   onRandomizeSpeakers?: () => void;
   isRandomizingSpeakers?: boolean;
+  onOpenEngineSettings?: () => void;
 }
 
 export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
@@ -35,12 +40,16 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
   onUpdateSpeaker,
   onAppendSpeakerBlock,
   onRandomizeSpeakers,
-  isRandomizingSpeakers = false
+  isRandomizingSpeakers = false,
+  onOpenEngineSettings
 }) => {
   const activeSpeaker = speakers.find((s) => s.id === activeSpeakerId) || speakers[0];
   const activeColor = SPEAKER_COLORS.find((c) => c.id === activeSpeakerId) || SPEAKER_COLORS[0];
 
-  // Engine / Provider filter tab
+  // Normalized active provider for the active speaker
+  const normalizedActiveProvider = normalizeProvider(activeSpeaker.provider);
+
+  // Engine / Provider filter tab for the voice grid
   const [providerFilter, setProviderFilter] = React.useState<'todos' | VoiceProvider>('todos');
 
   // Preview state
@@ -74,6 +83,25 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
       stopPreview();
     };
   }, [stopPreview, activeSpeakerId]);
+
+  // Dynamic Provider switch handler for active speaker
+  const handleSelectSpeakerProvider = (targetProvider: 'gemini' | 'openai' | 'elevenlabs') => {
+    const defaultVoice = getDefaultVoiceForEngine(targetProvider, activeSpeaker.voiceGender, activeSpeaker.id);
+    const provKey: VoiceProvider =
+      targetProvider === 'openai'
+        ? 'puter-openai'
+        : targetProvider === 'elevenlabs'
+        ? 'puter-elevenlabs'
+        : 'gemini';
+
+    onUpdateSpeaker(activeSpeaker.id, {
+      provider: provKey,
+      voiceName: defaultVoice.name,
+      voiceDescription: `${defaultVoice.providerLabel} - ${defaultVoice.timbre}`
+    });
+
+    setProviderFilter(provKey);
+  };
 
   const handleTogglePreview = async (profile: VoiceProfile) => {
     if (playingVoiceId === profile.id) {
@@ -120,7 +148,11 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
     if (providerFilter === 'todos') {
       return ALL_VOICE_PROFILES;
     }
-    return ALL_VOICE_PROFILES.filter((v) => v.provider === providerFilter);
+    return ALL_VOICE_PROFILES.filter((v) => {
+      const vNorm = normalizeProvider(v.provider);
+      const fNorm = normalizeProvider(providerFilter);
+      return vNorm === fNorm || v.provider === providerFilter;
+    });
   }, [providerFilter]);
 
   // Current voice profile object for the active speaker
@@ -131,9 +163,10 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
         v.id === activeSpeaker.voiceName
     ) || ALL_VOICE_PROFILES[0];
 
-  const getProviderBadge = (provider: VoiceProvider) => {
-    switch (provider) {
-      case 'puter-openai':
+  const getProviderBadge = (provider?: VoiceProvider) => {
+    const norm = normalizeProvider(provider);
+    switch (norm) {
+      case 'openai':
         return {
           label: 'OpenAI TTS',
           bg: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
@@ -143,7 +176,7 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
           label: 'Microsoft Edge',
           bg: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30'
         };
-      case 'puter-elevenlabs':
+      case 'elevenlabs':
         return {
           label: 'ElevenLabs',
           bg: 'bg-purple-500/15 text-purple-300 border-purple-500/30'
@@ -178,7 +211,7 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
               </span>
             </h3>
             <p className="text-[11px] text-slate-400">
-              Escolha livremente entre vozes OpenAI TTS (via Puter.js), Microsoft Edge Neural, ElevenLabs e Gemini.
+              Escolha livremente entre vozes OpenAI TTS (via Puter.js), ElevenLabs, Microsoft Edge e Gemini.
             </p>
           </div>
         </div>
@@ -216,6 +249,97 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
             <Plus className="w-3.5 h-3.5" />
             <span>Inserir Fala de {activeSpeaker.name}</span>
           </button>
+        </div>
+      </div>
+
+      {/* --- DYNAMIC PROVIDER SELECTOR IN HEADER --- */}
+      {/* Allows switching the active speaker provider between 'gemini', 'openai' and 'elevenlabs' (Puter.js) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-950/80 border border-slate-800/90 mb-3.5">
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded-md bg-slate-800 text-slate-300">
+            <Bot className="w-3.5 h-3.5 text-indigo-400" />
+          </div>
+          <div>
+            <div className="text-[11px] font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+              Engine do Locutor Ativo: <span className="text-white font-extrabold">{activeSpeaker.name}</span>
+              <span
+                className="text-[10px] font-bold px-1.5 py-0.2 rounded"
+                style={{
+                  backgroundColor: `${activeColor.primary}25`,
+                  color: activeColor.primary
+                }}
+              >
+                Speaker {activeSpeaker.id}
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400">
+              Alterne a engine de síntese usada na geração deste locutor
+            </p>
+          </div>
+        </div>
+
+        {/* Dynamic Provider Selector Buttons: Gemini, OpenAI, ElevenLabs */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          {/* Gemini */}
+          <button
+            type="button"
+            onClick={() => handleSelectSpeakerProvider('gemini')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+              normalizedActiveProvider === 'gemini'
+                ? 'bg-indigo-600 text-white border-indigo-400 shadow-sm shadow-indigo-600/30 ring-1 ring-indigo-400/50'
+                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+            }`}
+            title="Google Gemini 3.8 Flash TTS nativo"
+          >
+            <span className={`w-2 h-2 rounded-full ${normalizedActiveProvider === 'gemini' ? 'bg-white' : 'bg-indigo-400'}`} />
+            <span>Gemini TTS</span>
+            {normalizedActiveProvider === 'gemini' && <Check className="w-3 h-3 ml-0.5" />}
+          </button>
+
+          {/* OpenAI TTS via Puter.js */}
+          <button
+            type="button"
+            onClick={() => handleSelectSpeakerProvider('openai')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+              normalizedActiveProvider === 'openai'
+                ? 'bg-emerald-600 text-white border-emerald-400 shadow-sm shadow-emerald-600/30 ring-1 ring-emerald-400/50'
+                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+            }`}
+            title="OpenAI TTS (tts-1-hd) gratuito via Puter.js Gateway"
+          >
+            <span className={`w-2 h-2 rounded-full ${normalizedActiveProvider === 'openai' ? 'bg-white' : 'bg-emerald-400'}`} />
+            <span>OpenAI (Puter.js)</span>
+            {normalizedActiveProvider === 'openai' && <Check className="w-3 h-3 ml-0.5" />}
+          </button>
+
+          {/* ElevenLabs via Puter.js */}
+          <button
+            type="button"
+            onClick={() => handleSelectSpeakerProvider('elevenlabs')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer border ${
+              normalizedActiveProvider === 'elevenlabs'
+                ? 'bg-purple-600 text-white border-purple-400 shadow-sm shadow-purple-600/30 ring-1 ring-purple-400/50'
+                : 'bg-slate-900 text-slate-300 border-slate-800 hover:border-slate-700 hover:text-white'
+            }`}
+            title="ElevenLabs Multilingual v2 gratuito via Puter.js Gateway"
+          >
+            <span className={`w-2 h-2 rounded-full ${normalizedActiveProvider === 'elevenlabs' ? 'bg-white' : 'bg-purple-400'}`} />
+            <span>ElevenLabs (Puter.js)</span>
+            {normalizedActiveProvider === 'elevenlabs' && <Check className="w-3 h-3 ml-0.5" />}
+          </button>
+
+          {/* Settings modal shortcut */}
+          {onOpenEngineSettings && (
+            <button
+              type="button"
+              onClick={onOpenEngineSettings}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-indigo-300 hover:bg-slate-800/80 transition-colors border border-transparent hover:border-slate-700 cursor-pointer"
+              title="Abrir painel global de configurações de TTS e Gateways"
+            >
+              <Sliders className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden md:inline">Painel Global</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -442,8 +566,8 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
             {[
               { id: 'todos', label: '🌟 Todas as Vozes' },
               { id: 'puter-openai', label: '🤖 OpenAI TTS (Puter.js)' },
-              { id: 'microsoft-edge', label: '🔷 Microsoft Edge Neural' },
               { id: 'puter-elevenlabs', label: '🎙️ ElevenLabs (Puter.js)' },
+              { id: 'microsoft-edge', label: '🔷 Microsoft Edge Neural' },
               { id: 'puter-neural', label: '🧠 Puter Neural' },
               { id: 'gemini', label: '✨ Gemini 3.8 Flash' }
             ].map((tab) => (
@@ -465,9 +589,11 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
           {/* Voices Grid with 5-Second Functional Previews */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-72 overflow-y-auto pr-1">
             {filteredProfiles.map((v) => {
+              const vNorm = normalizeProvider(v.provider);
+              const spNorm = normalizeProvider(activeSpeaker.provider);
               const isSelected =
                 activeSpeaker.voiceName.toLowerCase() === v.name.toLowerCase() &&
-                (!activeSpeaker.provider || activeSpeaker.provider === v.provider);
+                vNorm === spNorm;
               const isPlaying = playingVoiceId === v.id;
               const badge = getProviderBadge(v.provider);
 

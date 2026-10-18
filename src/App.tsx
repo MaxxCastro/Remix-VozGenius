@@ -7,7 +7,9 @@ import {
   Sliders,
   Settings2,
   Wand2,
-  AlertCircle
+  AlertCircle,
+  Cpu,
+  Bot
 } from 'lucide-react';
 import { Navbar } from './components/Navbar';
 import { LanguageSelector } from './components/LanguageSelector';
@@ -18,11 +20,15 @@ import { SceneContextInput } from './components/SceneContextInput';
 import { ScriptEditor } from './components/ScriptEditor';
 import { ProgressBar } from './components/ProgressBar';
 import { AudioPlayer } from './components/AudioPlayer';
+import { VoiceEngineSettingsModal } from './components/VoiceEngineSettingsModal';
 
 import {
   SpeakerConfig,
   ConversionState,
-  SegmentTiming
+  SegmentTiming,
+  VoiceEngineId,
+  VoiceProvider,
+  SpeechSegment
 } from './types/tts';
 import {
   INITIAL_SPEAKERS,
@@ -31,6 +37,14 @@ import {
   ALL_VOICE_PROFILES
 } from './constants/ttsData';
 import { parseScriptToSegments } from './utils/ttsParser';
+import {
+  TTS_ENGINES,
+  normalizeProvider,
+  getDefaultVoiceForEngine,
+  isPuterAvailable,
+  synthesizeSpeechSegment
+} from './utils/voiceGateway';
+import { audioBufferToWavBlob, concatenateAudioBuffers } from './utils/audioEngine';
 
 export default function App() {
   // App State
@@ -40,6 +54,11 @@ export default function App() {
   const [sceneContext, setSceneContext] = React.useState(
     'Estúdio de podcast profissional com diálogo dinâmico e amigável entre dois amigos.'
   );
+
+  // Global Engine & Settings Modal
+  const [globalEngine, setGlobalEngine] = React.useState<VoiceEngineId>('gemini');
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = React.useState(false);
+  const [autoFallbackOnQuota, setAutoFallbackOnQuota] = React.useState(true);
 
   // Script text in format [Speaker 1 - Nome]: texto
   const [rawScript, setRawScript] = React.useState(PRESET_SCENES[0].text);
@@ -55,7 +74,7 @@ export default function App() {
   const [conversionState, setConversionState] = React.useState<ConversionState>({
     status: 'aguardando',
     progress: 0,
-    message: 'Pronto para converter. Clique em "Gerar Áudio com Gemini TTS" para iniciar.'
+    message: 'Pronto para converter. Clique em "Gerar Áudio do Roteiro" para iniciar.'
   });
 
   // Active playing speaker
@@ -102,7 +121,6 @@ export default function App() {
 
   // Insert tag or reaction into the active script
   const handleInsertTagIntoText = (tagString: string) => {
-    // If the active speaker block exists, append tag
     setRawScript((prev) => {
       return prev + ` ${tagString}`;
     });
@@ -128,6 +146,28 @@ export default function App() {
         message: `Exemplo "${preset.title}" carregado. Pronto para converter.`
       });
     }
+  };
+
+  // Apply chosen engine to all speakers
+  const handleApplyEngineToAllSpeakers = (engine: VoiceEngineId) => {
+    setGlobalEngine(engine);
+    setSpeakers((prev) =>
+      prev.map((sp, idx) => {
+        const defVoice = getDefaultVoiceForEngine(engine, sp.voiceGender, idx + 1);
+        const provKey: VoiceProvider =
+          engine === 'openai'
+            ? 'puter-openai'
+            : engine === 'elevenlabs'
+            ? 'puter-elevenlabs'
+            : engine;
+        return {
+          ...sp,
+          provider: provKey,
+          voiceName: defVoice.name,
+          voiceDescription: `${defVoice.providerLabel} - ${defVoice.timbre}`
+        };
+      })
+    );
   };
 
   // AI Generator state
@@ -186,7 +226,7 @@ export default function App() {
     }, 350);
   };
 
-  // Main Conversion Handler using Server-Sent Events (SSE)
+  // Multi-Engine Conversion Handler (Client-side Puter.js and Server-Side Gemini/Edge Stream)
   const handleStartConversion = async () => {
     const parsedSegments = parseScriptToSegments(rawScript, speakers);
 
@@ -200,10 +240,101 @@ export default function App() {
       return;
     }
 
+    // Check if any segments use Puter.js providers (OpenAI, ElevenLabs, Puter Neural)
+    const hasPuterSegments = parsedSegments.some((seg) => {
+      const p = normalizeProvider(seg.provider);
+      return p === 'openai' || p === 'elevenlabs' || p === 'puter-neural';
+    });
+
+    // If Puter.js is loaded in browser and segments use Puter providers, execute synthesis
+    if (hasPuterSegments && isPuterAvailable()) {
+      try {
+        setConversionState({
+          status: 'convertendo',
+          progress: 10,
+          message: 'Iniciando síntese vocal multi-engine via Gateway Puter.js...'
+        });
+
+        const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
+        const audioCtx = AudioCtxClass ? new AudioCtxClass() : null;
+        const audioBuffers: AudioBuffer[] = [];
+        const segmentsTiming: SegmentTiming[] = [];
+        let currentTimestamp = 0;
+
+        for (let i = 0; i < parsedSegments.length; i++) {
+          const seg = parsedSegments[i];
+          const pct = Math.round(15 + ((i + 0.5) / parsedSegments.length) * 75);
+          const normProv = normalizeProvider(seg.provider);
+
+          setConversionState({
+            status: 'convertendo',
+            progress: pct,
+            message: `Sintetizando fala ${i + 1}/${parsedSegments.length} com ${normProv.toUpperCase()} - ${seg.speakerName}...`
+          });
+
+          const synthRes = await synthesizeSpeechSegment(seg, selectedLanguage);
+
+          let duration = synthRes.duration || 2.5;
+
+          if (audioCtx && synthRes.arrayBuffer) {
+            try {
+              const decoded = await audioCtx.decodeAudioData(synthRes.arrayBuffer.slice(0));
+              audioBuffers.push(decoded);
+              duration = decoded.duration;
+            } catch (decErr) {
+              console.warn('Audio decode notice, using fallback duration:', decErr);
+            }
+          }
+
+          segmentsTiming.push({
+            speakerId: seg.speakerId,
+            speakerName: seg.speakerName,
+            text: seg.text,
+            startTime: currentTimestamp,
+            duration,
+            voiceName: seg.voiceName || 'Default'
+          });
+
+          currentTimestamp += duration + 0.25;
+        }
+
+        let finalAudioUrl: string;
+
+        if (audioCtx && audioBuffers.length > 0) {
+          const concatenated = concatenateAudioBuffers(audioCtx, audioBuffers, 0.25);
+          const wavBlob = audioBufferToWavBlob(concatenated);
+          finalAudioUrl = URL.createObjectURL(wavBlob);
+        } else {
+          // Single or first audio URL fallback
+          const firstAudio = await synthesizeSpeechSegment(parsedSegments[0], selectedLanguage);
+          finalAudioUrl = firstAudio.audioUrl;
+        }
+
+        const modelUsed = parsedSegments
+          .map((s) => normalizeProvider(s.provider).toUpperCase())
+          .filter((v, idx, arr) => arr.indexOf(v) === idx)
+          .join(' + ');
+
+        setConversionState({
+          status: 'concluído',
+          progress: 100,
+          message: 'Áudio sintetizado com sucesso via Gateway Puter.js!',
+          audioUrl: finalAudioUrl,
+          duration: currentTimestamp,
+          segmentsTiming,
+          modelUsed: `Gateway Puter.js (${modelUsed})`
+        });
+        return;
+      } catch (puterConversionErr: any) {
+        console.warn('Puter client conversion failed, falling back to server stream:', puterConversionErr);
+      }
+    }
+
+    // Server-Sent Events (SSE) Stream fallback or native Gemini TTS
     setConversionState({
       status: 'aguardando',
       progress: 5,
-      message: 'Conectando ao estúdio Gemini 3.8 Flash TTS...'
+      message: 'Conectando ao estúdio vocal Gemini 3.8 Flash TTS...'
     });
 
     try {
@@ -273,25 +404,36 @@ export default function App() {
     }
   };
 
+  const activeEngineMeta = TTS_ENGINES.find((e) => e.id === globalEngine) || TTS_ENGINES[0];
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* Top Navbar */}
       <Navbar
         onSelectPreset={handleSelectPreset}
         hasApiKey={hasApiKey}
+        activeEngine={globalEngine}
+        onOpenEngineSettings={() => setIsSettingsModalOpen(true)}
       />
 
       {/* Main Studio Body */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Banner if demo mode */}
+        {/* Banner if demo mode or active engine highlight */}
         {!hasApiKey && (
           <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between text-xs text-amber-200">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0" />
               <span>
-                <strong>Modo de Demonstração Ativo:</strong> Chave Gemini API não detectada no ambiente. O estúdio sintetizará áudios demonstrativos realistas e executará todas as funcionalidades perfeitamente!
+                <strong>Modo Gateway Livre:</strong> Use as opções do Puter.js (OpenAI TTS e ElevenLabs) ou Microsoft Edge Neural para sintetizar sem restrições de chaves!
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="text-xs font-semibold underline text-amber-300 hover:text-white ml-2 cursor-pointer"
+            >
+              Abrir Configurações
+            </button>
           </div>
         )}
 
@@ -334,7 +476,7 @@ export default function App() {
           onInsertTagIntoText={handleInsertTagIntoText}
         />
 
-        {/* Speaker Manager (Up to 5 speakers with colors and sliders) */}
+        {/* Speaker Manager (Up to 5 speakers with colors and sliders, header provider switcher) */}
         <SpeakerManager
           speakers={speakers}
           activeSpeakerId={activeSpeakerId}
@@ -343,6 +485,7 @@ export default function App() {
           onAppendSpeakerBlock={handleAppendSpeakerBlock}
           onRandomizeSpeakers={handleRandomizeSpeakers}
           isRandomizingSpeakers={isRandomizingSpeakers}
+          onOpenEngineSettings={() => setIsSettingsModalOpen(true)}
         />
 
         {/* Script & Dialogue Multi-Speaker Editor */}
@@ -358,6 +501,25 @@ export default function App() {
         {/* Action Button & Global Settings Bar */}
         <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-indigo-950/40 border border-indigo-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            {/* Active Engine Badge & Modal Opener */}
+            <button
+              type="button"
+              onClick={() => setIsSettingsModalOpen(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-indigo-500 text-left transition-all cursor-pointer group"
+              title="Clique para alternar o motor de voz global"
+            >
+              <Cpu className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition-transform" />
+              <div>
+                <div className="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">
+                  Engine Global Ativa
+                </div>
+                <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                  <span>{activeEngineMeta.badgeLabel}</span>
+                  <span className="text-[10px] text-indigo-400 underline font-normal">Alterar</span>
+                </div>
+              </div>
+            </button>
+
             {/* Global Master Speed */}
             <div className="flex items-center gap-2">
               <label className="text-xs font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap">
@@ -410,7 +572,7 @@ export default function App() {
             <span>
               {conversionState.status === 'convertendo'
                 ? 'Sintetizando Áudio...'
-                : 'Gerar Áudio com Gemini TTS'}
+                : 'Gerar Áudio do Roteiro'}
             </span>
           </button>
         </div>
@@ -438,10 +600,22 @@ export default function App() {
         )}
       </main>
 
+      {/* Voice Engine Settings Modal */}
+      <VoiceEngineSettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
+        activeEngine={globalEngine}
+        onSelectEngine={(eng) => setGlobalEngine(eng)}
+        onApplyEngineToAllSpeakers={handleApplyEngineToAllSpeakers}
+        autoFallbackOnQuota={autoFallbackOnQuota}
+        onToggleAutoFallback={setAutoFallbackOnQuota}
+        speakers={speakers}
+      />
+
       {/* Footer */}
       <footer className="border-t border-slate-900 bg-slate-950 py-4 mt-8">
         <div className="max-w-7xl mx-auto px-4 text-center text-xs text-slate-500">
-          VozGenius AI • Estúdio Neural com Gemini 3.8 Flash TTS • Suporte a 5 Locutores, Sotaques Regionais Brasileiros e Masterização WAV 24kHz.
+          VozGenius AI • Multi-Gateway TTS com Puter.js (OpenAI & ElevenLabs), Gemini 3.8 Flash e Microsoft Edge Neural • Suporte a 5 Locutores e Masterização WAV 24kHz.
         </div>
       </footer>
     </div>

@@ -1,13 +1,24 @@
 import React from 'react';
-import { Volume2, Sparkles, BookOpen } from 'lucide-react';
+import { Volume2, Sparkles, BookOpen, Sliders, Cpu } from 'lucide-react';
 import { PRESET_SCENES } from '../constants/ttsData';
+import { VoiceEngineId } from '../types/tts';
+import { TTS_ENGINES } from '../utils/voiceGateway';
 
 interface NavbarProps {
   onSelectPreset: (presetId: string) => void;
   hasApiKey: boolean;
+  activeEngine?: VoiceEngineId;
+  onOpenEngineSettings?: () => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ onSelectPreset, hasApiKey }) => {
+export const Navbar: React.FC<NavbarProps> = ({
+  onSelectPreset,
+  hasApiKey,
+  activeEngine = 'gemini',
+  onOpenEngineSettings
+}) => {
+  const currentEngineMeta = TTS_ENGINES.find((e) => e.id === activeEngine) || TTS_ENGINES[0];
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -32,13 +43,27 @@ export const Navbar: React.FC<NavbarProps> = ({ onSelectPreset, hasApiKey }) => 
           </div>
         </div>
 
-        {/* Preset Presets & Status */}
+        {/* Action Controls & Settings */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Engine Settings Modal Trigger */}
+          {onOpenEngineSettings && (
+            <button
+              type="button"
+              onClick={onOpenEngineSettings}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-200 bg-slate-900 border border-slate-800 hover:border-indigo-500 hover:text-white transition-all shadow-sm cursor-pointer"
+              title="Abrir painel de configuração de engines de voz e gateways de IA"
+            >
+              <Cpu className="w-3.5 h-3.5 text-indigo-400" />
+              <span className="hidden sm:inline">Engine:</span>
+              <span className="text-indigo-300 font-bold">{currentEngineMeta.badgeLabel}</span>
+            </button>
+          )}
+
           {/* Quick Presets */}
           <div className="relative group">
             <button
               type="button"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-300 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:text-white transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 bg-slate-900 border border-slate-800 hover:border-slate-700 hover:text-white transition-colors cursor-pointer"
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
               <span className="hidden sm:inline">Exemplos Prontos</span>
@@ -52,7 +77,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSelectPreset, hasApiKey }) => 
                 <button
                   key={preset.id}
                   onClick={() => onSelectPreset(preset.id)}
-                  className="w-full text-left p-2 rounded-lg hover:bg-slate-800/80 transition-colors group/item"
+                  className="w-full text-left p-2 rounded-lg hover:bg-slate-800/80 transition-colors group/item cursor-pointer"
                 >
                   <div className="text-xs font-semibold text-slate-200 group-hover/item:text-indigo-400">
                     {preset.title}
@@ -69,11 +94,11 @@ export const Navbar: React.FC<NavbarProps> = ({ onSelectPreset, hasApiKey }) => 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-xs">
             <span
               className={`w-2 h-2 rounded-full ${
-                hasApiKey ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'
+                hasApiKey ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-400'
               }`}
             />
             <span className="text-[11px] text-slate-300 font-mono">
-              {hasApiKey ? 'Gemini 3.8 Conectado' : 'Modo Preview'}
+              {hasApiKey ? 'Online' : 'Puter.js Livre'}
             </span>
           </div>
         </div>

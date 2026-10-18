@@ -1,4 +1,5 @@
-import { VoiceProfile, VoiceProvider, SpeakerConfig, SpeechSegment } from '../types/tts';
+import { VoiceProfile, VoiceProvider, VoiceEngineId, SpeakerConfig, SpeechSegment } from '../types/tts';
+import { ALL_VOICE_PROFILES } from '../constants/ttsData';
 
 declare global {
   interface Window {
@@ -23,6 +24,112 @@ declare global {
 
 export function isPuterAvailable(): boolean {
   return typeof window !== 'undefined' && Boolean(window.puter?.ai?.txt2speech);
+}
+
+export function normalizeProvider(provider?: string): VoiceEngineId {
+  if (!provider) return 'gemini';
+  if (provider === 'openai' || provider === 'puter-openai') return 'openai';
+  if (provider === 'elevenlabs' || provider === 'puter-elevenlabs') return 'elevenlabs';
+  if (provider === 'microsoft-edge') return 'microsoft-edge';
+  if (provider === 'puter-neural') return 'puter-neural';
+  return 'gemini';
+}
+
+export interface EngineMeta {
+  id: VoiceEngineId;
+  label: string;
+  badgeLabel: string;
+  description: string;
+  badgeClass: string;
+  borderClass: string;
+  highlightColor: string;
+  isPuter: boolean;
+  freeTier: boolean;
+}
+
+export const TTS_ENGINES: EngineMeta[] = [
+  {
+    id: 'gemini',
+    label: 'Google Gemini 3.8 Flash TTS',
+    badgeLabel: 'Gemini 3.8',
+    description: 'Motor nativo com 5 vozes neurais multimodais, controle refinado de emoção, velocidade e sotaques regionais.',
+    badgeClass: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+    borderClass: 'border-indigo-500',
+    highlightColor: '#6366f1',
+    isPuter: false,
+    freeTier: true
+  },
+  {
+    id: 'openai',
+    label: 'OpenAI TTS (Puter.js)',
+    badgeLabel: 'OpenAI TTS',
+    description: 'Vozes estúdio tts-1-hd da OpenAI (Nova, Alloy, Echo, Onyx, Shimmer, Fable) gratuitas via Gateway Puter.js.',
+    badgeClass: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    borderClass: 'border-emerald-500',
+    highlightColor: '#10b981',
+    isPuter: true,
+    freeTier: true
+  },
+  {
+    id: 'elevenlabs',
+    label: 'ElevenLabs Multilingual (Puter.js)',
+    badgeLabel: 'ElevenLabs',
+    description: 'Vozes de cinema e audiobooks (Rachel, Adam, Antoni, Bella, Josh) via Gateway Puter.js sem custos.',
+    badgeClass: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+    borderClass: 'border-purple-500',
+    highlightColor: '#a855f7',
+    isPuter: true,
+    freeTier: true
+  },
+  {
+    id: 'microsoft-edge',
+    label: 'Microsoft Edge Neural TTS',
+    badgeLabel: 'Edge Neural',
+    description: 'Vozes neurais brasileiras autênticas do Edge (Francisca, Antonio, Thalita, Fabio, Nicolau) com dicção impecável.',
+    badgeClass: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+    borderClass: 'border-cyan-500',
+    highlightColor: '#06b6d4',
+    isPuter: false,
+    freeTier: true
+  },
+  {
+    id: 'puter-neural',
+    label: 'Puter Neural Engine',
+    badgeLabel: 'Puter Neural',
+    description: 'Motor neural proprietário da nuvem Puter (Camila, Ricardo, Vitória, Joanna, Matthew) de resposta rápida.',
+    badgeClass: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    borderClass: 'border-amber-500',
+    highlightColor: '#f59e0b',
+    isPuter: true,
+    freeTier: true
+  }
+];
+
+export function getDefaultVoiceForEngine(
+  engine: VoiceEngineId,
+  gender: 'Feminino' | 'Masculino' = 'Feminino',
+  speakerIndex = 1
+): VoiceProfile {
+  const providerKey: VoiceProvider =
+    engine === 'openai'
+      ? 'puter-openai'
+      : engine === 'elevenlabs'
+      ? 'puter-elevenlabs'
+      : engine;
+
+  const matches = ALL_VOICE_PROFILES.filter((v) => v.provider === providerKey);
+
+  // Filter by gender if possible
+  const genderMatches = matches.filter((v) => v.gender === gender);
+  const pool = genderMatches.length > 0 ? genderMatches : matches;
+
+  if (pool.length === 0) {
+    return ALL_VOICE_PROFILES[0];
+  }
+
+  // Pick index-based or first recommended
+  const recommended = pool.find((v) => v.recommended);
+  return pool[(speakerIndex - 1) % pool.length] || recommended || pool[0];
 }
 
 export const SAMPLE_PHRASES: Record<string, string> = {
@@ -82,11 +189,12 @@ export async function generateVoicePreviewAudio(
   stop: () => void;
 }> {
   const phrase = customText || SAMPLE_PHRASES[profile.name] || `Demonstração da voz ${profile.name} no estúdio neural.`;
+  const normalized = normalizeProvider(profile.provider);
 
   // Try Puter.js directly in browser if available and provider is supported
   if (isPuterAvailable()) {
     try {
-      if (profile.provider === 'puter-openai') {
+      if (normalized === 'openai') {
         const audio = await window.puter!.ai.txt2speech(phrase, {
           provider: 'openai',
           model: profile.model || 'tts-1-hd',
@@ -106,7 +214,7 @@ export async function generateVoicePreviewAudio(
         };
       }
 
-      if (profile.provider === 'puter-elevenlabs') {
+      if (normalized === 'elevenlabs') {
         const audio = await window.puter!.ai.txt2speech(phrase, {
           provider: 'elevenlabs',
           model: profile.model || 'eleven_multilingual_v2',
@@ -126,7 +234,7 @@ export async function generateVoicePreviewAudio(
         };
       }
 
-      if (profile.provider === 'puter-neural') {
+      if (normalized === 'puter-neural') {
         const audio = await window.puter!.ai.txt2speech(phrase, {
           engine: 'neural',
           voice: profile.name
@@ -145,7 +253,7 @@ export async function generateVoicePreviewAudio(
         };
       }
     } catch (puterErr) {
-      console.warn(`Puter.js synthesis for ${profile.name} failed, falling back to server:`, puterErr);
+      console.warn(`Puter.js synthesis for ${profile.name} failed, falling back:`, puterErr);
     }
   }
 
@@ -197,4 +305,79 @@ export async function generateVoicePreviewAudio(
       }
     });
   });
+}
+
+/**
+ * Synthesizes a speech segment using the segment's specific provider engine.
+ */
+export async function synthesizeSpeechSegment(
+  segment: SpeechSegment,
+  language = 'pt-BR'
+): Promise<{
+  audioElement?: HTMLAudioElement;
+  audioUrl: string;
+  duration: number;
+  arrayBuffer?: ArrayBuffer;
+}> {
+  const normalized = normalizeProvider(segment.provider);
+  const text = segment.text.trim();
+
+  // If Puter.js is available and engine is OpenAI, ElevenLabs, or Puter Neural
+  if (isPuterAvailable() && (normalized === 'openai' || normalized === 'elevenlabs' || normalized === 'puter-neural')) {
+    try {
+      let audio: HTMLAudioElement;
+      if (normalized === 'openai') {
+        audio = await window.puter!.ai.txt2speech(text, {
+          provider: 'openai',
+          model: 'tts-1-hd',
+          voice: segment.voiceName || 'nova'
+        });
+      } else if (normalized === 'elevenlabs') {
+        audio = await window.puter!.ai.txt2speech(text, {
+          provider: 'elevenlabs',
+          model: 'eleven_multilingual_v2',
+          voice: segment.voiceName || 'Rachel'
+        });
+      } else {
+        audio = await window.puter!.ai.txt2speech(text, {
+          engine: 'neural',
+          voice: segment.voiceName || 'Camila'
+        });
+      }
+
+      if (audio && audio.src) {
+        // Fetch arrayBuffer for audio concatenation if needed
+        let arrayBuffer: ArrayBuffer | undefined;
+        try {
+          const resp = await fetch(audio.src);
+          arrayBuffer = await resp.arrayBuffer();
+        } catch {
+          // Cross-origin audio element can still play
+        }
+        const estDuration = Math.max(1.5, text.length * 0.075);
+        return {
+          audioElement: audio,
+          audioUrl: audio.src,
+          duration: estDuration,
+          arrayBuffer
+        };
+      }
+    } catch (puterErr) {
+      console.warn(`Puter segment synthesis failed for [${segment.speakerName}]:`, puterErr);
+    }
+  }
+
+  // Fallback to server preview/speech synthesis
+  const previewRes = await fetch(
+    `/api/tts/preview?voice=${encodeURIComponent(segment.voiceName || 'Kore')}&provider=${segment.provider || 'gemini'}`
+  );
+  const data = await previewRes.json();
+  if (data.success && data.audioUrl) {
+    return {
+      audioUrl: data.audioUrl,
+      duration: data.duration || Math.max(1.5, text.length * 0.075)
+    };
+  }
+
+  throw new Error(`Não foi possível sintetizar a fala para ${segment.speakerName}`);
 }
