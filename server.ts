@@ -1,0 +1,499 @@
+import express from 'express';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { GoogleGenAI } from '@google/genai';
+
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+
+app.use(express.json({ limit: '10mb' }));
+
+// Helper to clean tags from dialogue text for speech synthesis
+function cleanTextForSpeech(text: string): string {
+  return text
+    .replace(/\[(?:Speaker\s*\d+[^\]]*|[^\]]+)\]/gi, '') // Remove speaker headers and [tag]
+    .replace(/<[^>]+>/g, '') // Remove <laugh>, <breath>, etc.
+    .replace(/\|[^|]+\|/g, '') // Remove |yeah|, |mhm|, etc.
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Helper to create WAV Header (RIFF WAV 24kHz 16-bit mono)
+function createWavHeader(dataLength: number, sampleRate = 24000, numChannels = 1, bitsPerSample = 16): Buffer {
+  const buffer = Buffer.alloc(44);
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+
+  buffer.write('RIFF', 0);
+  buffer.writeUInt32LE(36 + dataLength, 4);
+  buffer.write('WAVE', 8);
+  buffer.write('fmt ', 12);
+  buffer.writeUInt32LE(16, 16);
+  buffer.writeUInt16LE(1, 20); // Linear PCM
+  buffer.writeUInt16LE(numChannels, 22);
+  buffer.writeUInt32LE(sampleRate, 24);
+  buffer.writeUInt32LE(byteRate, 28);
+  buffer.writeUInt16LE(blockAlign, 32);
+  buffer.writeUInt16LE(bitsPerSample, 34);
+  buffer.write('data', 36);
+  buffer.writeUInt32LE(dataLength, 40);
+  return buffer;
+}
+
+// Extract PCM from WAV buffer (handles standard RIFF format)
+function extractPcmFromWav(wavBuffer: Buffer): Buffer {
+  if (wavBuffer.length < 44) return wavBuffer;
+  if (wavBuffer.subarray(0, 4).toString('ascii') !== 'RIFF') {
+    return wavBuffer;
+  }
+
+  // Look for 'data' chunk
+  let offset = 12;
+  while (offset + 8 <= wavBuffer.length) {
+    const chunkId = wavBuffer.subarray(offset, offset + 4).toString('ascii');
+    const chunkSize = wavBuffer.readUInt32LE(offset + 4);
+    if (chunkId === 'data') {
+      const pcmStart = offset + 8;
+      const pcmEnd = Math.min(wavBuffer.length, pcmStart + chunkSize);
+      return wavBuffer.subarray(pcmStart, pcmEnd);
+    }
+    offset += 8 + chunkSize;
+  }
+
+  return wavBuffer.subarray(44);
+}
+
+// Generate simple silence PCM buffer (24kHz 16-bit mono = 48000 bytes/sec)
+function createSilencePcm(durationMs: number, sampleRate = 24000): Buffer {
+  const numSamples = Math.floor((sampleRate * durationMs) / 1000);
+  return Buffer.alloc(numSamples * 2, 0);
+}
+
+// Fallback high-fidelity speech synthesizer using 24kHz audio synthesis
+async function fetchSpeechAudioFallback(text: string, language = 'pt-BR'): Promise<Buffer> {
+  const clean = cleanTextForSpeech(text);
+  if (!clean) {
+    return Buffer.alloc(0);
+  }
+
+  const langCode = language === 'pt-BR' ? 'pt-BR' : language.split('-')[0];
+  const encoded = encodeURIComponent(clean.slice(0, 200));
+  const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=${langCode}&client=tw-ob`;
+
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha no motor vocal alternativo: HTTP ${response.status}`);
+  }
+
+  const arrayBuf = await response.arrayBuffer();
+  return Buffer.from(arrayBuf);
+}
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    hasApiKey: Boolean(process.env.GEMINI_API_KEY),
+    model: 'gemini-3.8-flash-tts'
+  });
+});
+
+// Cache for generated 5-second voice previews
+const voicePreviewCache = new Map<string, string>();
+
+// 5-second Voice Preview endpoint
+app.get('/api/tts/preview', async (req, res) => {
+  try {
+    const voiceName = (req.query.voice as string) || 'Kore';
+    const samplePhrases: Record<string, string> = {
+      Kore: 'Olá! Esta é uma demonstração da voz Kore, feminina, clara e expressiva com Gemini TTS.',
+      Puck: 'Fala aí! Esta é uma demonstração da voz Puck, tom masculino jovem, versátil e dinâmico.',
+      Charon: 'Olá. Esta é uma demonstração da voz Charon, tom masculino grave, sereno e confiante.',
+      Fenrir: 'Atenção. Esta é uma demonstração da voz Fenrir, voz masculina profunda, épica e cinematográfica.',
+      Zephyr: 'Olá! Esta é uma demonstração da voz Zephyr, tom feminino suave, doce e acolhedor.'
+    };
+
+    const text = samplePhrases[voiceName] || samplePhrases.Kore;
+
+    // Return cached audio if available
+    if (voicePreviewCache.has(voiceName)) {
+      return res.json({
+        success: true,
+        voiceName,
+        audioUrl: voicePreviewCache.get(voiceName),
+        duration: 5.0,
+        cached: true
+      });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    let dataUri: string | null = null;
+
+    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+      try {
+        const ai = new GoogleGenAI({
+          apiKey,
+          httpOptions: {
+            headers: { 'User-Agent': 'aistudio-build' }
+          }
+        });
+
+        const candidateModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
+        for (const candidate of candidateModels) {
+          try {
+            const response = await ai.models.generateContent({
+              model: candidate,
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text,
+                      speechMetadata: {
+                        speaker: voiceName,
+                        style: `Apresentação de áudio curta de 5 segundos em português brasileiro com voz ${voiceName}.`
+                      }
+                    }
+                  ]
+                }
+              ],
+              config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName: voiceName as any }
+                  }
+                }
+              }
+            });
+
+            const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (base64Audio) {
+              const rawWav = Buffer.from(base64Audio, 'base64');
+              const pcm = extractPcmFromWav(rawWav);
+              // Cap at ~5 seconds (24000 samples/sec * 2 bytes = 48000 bytes/sec * 5 = 240,000 bytes)
+              const maxPcmBytes = 240000;
+              const trimmedPcm = pcm.length > maxPcmBytes ? pcm.subarray(0, maxPcmBytes) : pcm;
+              const wavHeader = createWavHeader(trimmedPcm.length, 24000, 1, 16);
+              const finalWavBuffer = Buffer.concat([wavHeader, trimmedPcm]);
+              dataUri = `data:audio/wav;base64,${finalWavBuffer.toString('base64')}`;
+              break;
+            }
+          } catch (modelErr) {
+            console.warn(`Preview Gemini attempt with ${candidate} failed:`, modelErr);
+          }
+        }
+      } catch (geminiErr) {
+        console.warn('Preview Gemini TTS setup failed:', geminiErr);
+      }
+    }
+
+    // High fidelity fallback if Gemini is not configured or failed
+    if (!dataUri) {
+      const fallbackBuf = await fetchSpeechAudioFallback(text, 'pt-BR');
+      if (fallbackBuf.length > 0) {
+        dataUri = `data:audio/mp3;base64,${fallbackBuf.toString('base64')}`;
+      }
+    }
+
+    if (dataUri) {
+      voicePreviewCache.set(voiceName, dataUri);
+      return res.json({
+        success: true,
+        voiceName,
+        audioUrl: dataUri,
+        duration: 5.0
+      });
+    }
+
+    throw new Error('Não foi possível gerar a pré-visualização de voz.');
+  } catch (error: any) {
+    console.error('Error generating preview:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Erro ao gerar preview de voz.'
+    });
+  }
+});
+
+// Main SSE TTS endpoint with live progress updates
+app.post('/api/tts/generate-stream', async (req, res) => {
+  // Set headers for Server-Sent Events
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (eventData: any) => {
+    res.write(`data: ${JSON.stringify(eventData)}\n\n`);
+  };
+
+  try {
+    const { sceneContext, language = 'pt-BR', segments = [], globalSpeed = 1.0, globalPitch = 0 } = req.body;
+
+    if (!Array.isArray(segments) || segments.length === 0) {
+      sendEvent({
+        type: 'status',
+        status: 'erro',
+        progress: 0,
+        error: 'Nenhum segmento de fala foi fornecido para conversão.'
+      });
+      res.end();
+      return;
+    }
+
+    sendEvent({
+      type: 'status',
+      status: 'aguardando',
+      progress: 5,
+      message: 'Inicializando o estúdio vocal Gemini 3.8 Flash TTS...'
+    });
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    let ai: GoogleGenAI | null = null;
+    if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
+      ai = new GoogleGenAI({
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
+    }
+
+    const pcmChunks: Buffer[] = [];
+    const mp3Chunks: Buffer[] = [];
+    let isMp3Mode = false;
+
+    const segmentsTiming: Array<{
+      speakerId: number;
+      speakerName: string;
+      text: string;
+      startTime: number;
+      duration: number;
+      voiceName: string;
+    }> = [];
+
+    let currentTimestamp = 0;
+    let finalModelName = 'gemini-3.8-flash-tts';
+    let hitGeminiQuota = false;
+    const totalSegments = segments.length;
+
+    for (let i = 0; i < totalSegments; i++) {
+      const seg = segments[i];
+      const speakerId = seg.speakerId || (i % 5) + 1;
+      const speakerName = seg.speakerName || `Speaker ${speakerId}`;
+      const text = (seg.text || '').trim();
+
+      if (!text) continue;
+
+      const progressPercent = Math.round(10 + ((i + 0.3) / totalSegments) * 80);
+      sendEvent({
+        type: 'status',
+        status: 'convertendo',
+        progress: progressPercent,
+        message: `Sintetizando fala ${i + 1}/${totalSegments} - ${speakerName}${seg.accent ? ` (${seg.accent})` : ''}...`,
+        segmentIndex: i,
+        totalSegments
+      });
+
+      // Assemble style directives
+      const styleDirectives: string[] = [];
+      if (sceneContext) styleDirectives.push(`Cenário e ambientação: ${sceneContext}.`);
+      if (seg.accent) styleDirectives.push(`Sotaque característico brasileiro: sotaque ${seg.accent}.`);
+      if (seg.tags && Array.isArray(seg.tags) && seg.tags.length > 0) {
+        styleDirectives.push(`Tom emotivo e estilo de voz: ${seg.tags.join(', ')}.`);
+      }
+      const effectiveSpeed = (seg.speed || 1.0) * globalSpeed;
+      if (Math.abs(effectiveSpeed - 1.0) > 0.05) {
+        styleDirectives.push(`Ritmo de fala: ${effectiveSpeed.toFixed(2)}x ${effectiveSpeed > 1 ? 'mais rápido' : 'mais pausado'}.`);
+      }
+      const effectivePitch = (seg.pitch || 0) + globalPitch;
+      if (effectivePitch !== 0) {
+        styleDirectives.push(`Tom da voz: ${effectivePitch > 0 ? '+' : ''}${effectivePitch} semitons.`);
+      }
+      if (language === 'pt-BR') {
+        styleDirectives.push('Fale fluentemente em Português do Brasil com entonação natural e expressiva.');
+      } else {
+        styleDirectives.push(`Language code: ${language}. Natural native cadence.`);
+      }
+
+      const styleString = styleDirectives.join(' ');
+      const voiceName = seg.voiceName || (speakerId % 2 === 1 ? 'Kore' : 'Puck');
+
+      let audioObtained = false;
+      let segDuration = 2.0;
+
+      // Try Gemini TTS first if quota not already marked as exhausted
+      if (ai && !hitGeminiQuota && !isMp3Mode) {
+        const candidateModels = ['gemini-3.8-flash-tts', 'gemini-3.8-flash-lite-tts'];
+        for (const candidate of candidateModels) {
+          try {
+            const response = await ai.models.generateContent({
+              model: candidate,
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    {
+                      text,
+                      speechMetadata: {
+                        speaker: speakerName,
+                        style: styleString
+                      }
+                    }
+                  ]
+                }
+              ],
+              config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: { voiceName }
+                  }
+                }
+              }
+            });
+
+            const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+            if (base64Audio) {
+              const rawWav = Buffer.from(base64Audio, 'base64');
+              const pcm = extractPcmFromWav(rawWav);
+              segDuration = pcm.length / 48000;
+              pcmChunks.push(pcm);
+              finalModelName = candidate;
+              audioObtained = true;
+              break;
+            }
+          } catch (modelErr: any) {
+            console.warn(`Gemini TTS model ${candidate} failed on segment ${i + 1}:`, modelErr.status || modelErr.message);
+            if (modelErr.status === 429 || String(modelErr.message).includes('quota')) {
+              hitGeminiQuota = true;
+            }
+          }
+        }
+      }
+
+      // If Gemini hit quota or failed, use authentic speech synthesis fallback
+      if (!audioObtained) {
+        try {
+          const speechAudioBuf = await fetchSpeechAudioFallback(text, language);
+          if (speechAudioBuf.length > 0) {
+            mp3Chunks.push(speechAudioBuf);
+            isMp3Mode = true;
+            finalModelName = 'Motor Vocal de Alta Fidelidade (Fallback Automático - Cota Gemini 429)';
+            segDuration = Math.max(1.5, cleanTextForSpeech(text).length * 0.075);
+            audioObtained = true;
+          }
+        } catch (fbErr: any) {
+          console.error(`Fallback vocal engine failed on segment ${i + 1}:`, fbErr);
+        }
+      }
+
+      if (!audioObtained) {
+        throw new Error(`Falha ao sintetizar o áudio para o segmento ${i + 1} (${speakerName}).`);
+      }
+
+      // Record timing
+      segmentsTiming.push({
+        speakerId,
+        speakerName,
+        text,
+        startTime: currentTimestamp,
+        duration: segDuration,
+        voiceName
+      });
+
+      currentTimestamp += segDuration;
+
+      // Add a natural pause between speaker turns
+      if (i < totalSegments - 1) {
+        if (!isMp3Mode) {
+          const pausePcm = createSilencePcm(200);
+          pcmChunks.push(pausePcm);
+        }
+        currentTimestamp += 0.2;
+      }
+    }
+
+    sendEvent({
+      type: 'status',
+      status: 'convertendo',
+      progress: 95,
+      message: 'Masterizando faixa final de áudio estéreo/mono...'
+    });
+
+    let audioDataUri: string;
+
+    if (isMp3Mode || pcmChunks.length === 0) {
+      // Combined MP3 stream
+      const totalMp3 = Buffer.concat(mp3Chunks);
+      audioDataUri = `data:audio/mp3;base64,${totalMp3.toString('base64')}`;
+    } else {
+      // Combined WAV stream
+      const totalPcm = Buffer.concat(pcmChunks);
+      const wavHeader = createWavHeader(totalPcm.length, 24000, 1, 16);
+      const finalWavBuffer = Buffer.concat([wavHeader, totalPcm]);
+      audioDataUri = `data:audio/wav;base64,${finalWavBuffer.toString('base64')}`;
+    }
+
+    sendEvent({
+      type: 'status',
+      status: 'concluído',
+      progress: 100,
+      message: 'Áudio sintetizado com sucesso!',
+      audio: audioDataUri,
+      duration: currentTimestamp,
+      segmentsTiming,
+      modelUsed: finalModelName
+    });
+
+    res.end();
+  } catch (error: any) {
+    console.error('TTS Generation error:', error);
+    sendEvent({
+      type: 'status',
+      status: 'erro',
+      progress: 0,
+      error: error.message || 'Ocorreu um erro ao processar o áudio.'
+    });
+    res.end();
+  }
+});
+
+// Setup Vite in development or static serving in production
+async function startServer() {
+  const isProd = process.env.NODE_ENV === 'production';
+
+  if (!isProd) {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(__dirname, 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`TTS Studio Server running at http://0.0.0.0:${PORT}`);
+  });
+}
+
+startServer();

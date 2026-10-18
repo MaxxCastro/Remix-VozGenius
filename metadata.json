@@ -1,0 +1,8 @@
+{
+  "name": "Remix VozGenius AI - Estúdio TTS Multi-Speaker",
+  "description": "Conversão avançada de texto em fala com Gemini 3.8 Flash TTS, múltiplos speakers, sotaques brasileiros, tags emocionais e controle refinado de tom e velocidade.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
