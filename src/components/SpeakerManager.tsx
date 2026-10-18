@@ -171,23 +171,18 @@ export const SpeakerManager: React.FC<SpeakerManagerProps> = ({
 
             <div>
               <label className="block text-[11px] font-semibold text-slate-300 uppercase tracking-wider mb-1">
-                Voz Neural do Gemini 3.8
+                Identidade Vocal & Sotaque
               </label>
-              <select
-                value={activeSpeaker.voiceName}
-                onChange={(e) =>
-                  onUpdateSpeaker(activeSpeaker.id, {
-                    voiceName: e.target.value as GeminiVoiceName
-                  })
-                }
-                className="w-full px-3 py-2 bg-slate-950 border border-slate-700/80 rounded-lg text-xs text-slate-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-medium cursor-pointer"
-              >
-                {PREBUILT_VOICES.map((v) => (
-                  <option key={v.name} value={v.name}>
-                    {v.name} ({v.gender} - {v.timbre})
-                  </option>
-                ))}
-              </select>
+              <div className="w-full px-3 py-2 bg-slate-950/70 border border-slate-800 rounded-lg text-xs text-slate-300 flex items-center justify-between">
+                <span className="font-medium text-slate-200">
+                  {activeSpeaker.accent ? `Sotaque ${activeSpeaker.accent}` : 'Sotaque Neutro / Padrão'}
+                </span>
+                <span className="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
+                  {activeSpeaker.tags && activeSpeaker.tags.length > 0
+                    ? `${activeSpeaker.tags.length} tom(ns)`
+                    : 'Natural'}
+                </span>
+              </div>
             </div>
           </div>
 
